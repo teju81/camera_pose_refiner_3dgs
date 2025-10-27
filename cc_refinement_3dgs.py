@@ -24,11 +24,8 @@ class FrontEnd:
         bg_color = [0, 0, 0]
         self.background = torch.tensor(bg_color, dtype=torch.float32, device="cuda") # Retain
         self.pipeline_params = munchify(self.config["pipeline_params"]) # Retain
-        self.use_spherical_harmonics = self.config["Training"]["spherical_harmonics"]
-        self.model_params = munchify(self.config["model_params"])
-        self.model_params.sh_degree = 3 if self.use_spherical_harmonics else 0
+        self.gaussians = None
 
-        self.gaussians = GaussianModel(self.model_params.sh_degree, config=self.config) # Retain
         self.device = "cuda:0" # Retain
 
         self.tracking_itr_num = self.config["Training"]["tracking_itr_num"] # Retain
@@ -107,21 +104,33 @@ class FrontEnd:
 
     def run(self):
 
+def main():
 
+    # # Set up command line argument parser
+    # parser = ArgumentParser(description="Training script parameters")
+    # parser.add_argument("--config", type=str)
 
+    # args = parser.parse_args(sys.argv[1:])
+    #config_file_path = args.config
 
-if __name__ == "__main__":
-    # Set up command line argument parser
-    parser = ArgumentParser(description="Training script parameters")
-    parser.add_argument("--config", type=str)
+    config_file_path = "/root/code/camera_pose_refiner_3dgs/config.yaml"
 
-    args = parser.parse_args(sys.argv[1:])
-
-
-    with open(args.config, "r") as yml:
+    with open(config_file_path, "r") as yml:
         config = yaml.safe_load(yml)
 
     config = load_config(args.config)
+
+    device = "cuda:0"
+
+    fx = config["Dataset"]["Calibration"]["fx"]
+    fy = config["Dataset"]["Calibration"]["fy"]
+    cx = config["Dataset"]["Calibration"]["cx"]
+    cy = config["Dataset"]["Calibration"]["cy"]
+    fovx = config["Dataset"]["Calibration"]["fovx"]
+    fovy = config["Dataset"]["Calibration"]["fovy"]
+    height = config["Dataset"]["Calibration"]["height"]
+    width = config["Dataset"]["Calibration"]["width"]
+
 
     # Need to define Viewpoint and pass it to this function
     projection_matrix = getProjectionMatrix2(
@@ -136,9 +145,11 @@ if __name__ == "__main__":
     ).transpose(0, 1)
     projection_matrix = projection_matrix.to(device=device)
 
+    # depth and pose can be some random initialization, gt_color must be initialized with infra camera RGB image
     gt_color, gt_depth, gt_pose
+
     viewpoint = Camera(
-        idx,
+        0,
         gt_color,
         gt_depth,
         gt_pose,
@@ -151,14 +162,26 @@ if __name__ == "__main__":
         fovy,
         height,
         width,
-        device=self.device,
+        device=device,
     )
     viewpoint.compute_grad_mask(config)
 
 
     # Need to provide approx infra camera pose here - check format
     viewpoint.update_RT(R, T)
-    
+
+
+    sh_degree = 3
+    #ply_file_path="/root/code/datasets/xgrids/LCC_output/AG_Office/ply-result/point_cloud/iteration_100/point_cloud.ply"
+    ply_file_path="/root/code/datasets/ARTGarage/lab_office_in_out_k1_scanner/output/LCC_Studio_GaussianSplat_out/AG_lab/ply-result/point_cloud/iteration_100/point_cloud.ply"
+
+    # Load Gaussian Model
+    use_spherical_harmonics = config["Training"]["spherical_harmonics"]
+    model_params = munchify(config["model_params"])
+    model_params.sh_degree = 3 if use_spherical_harmonics else 0
+    front_end = FrontEnd(config)
+    front_end.gaussians = GaussianModel(model_params.sh_degree, config=config) # Retain
+
     # Tracking
     render_pkg = self.tracking(cur_frame_idx, viewpoint)
 
@@ -168,3 +191,9 @@ if __name__ == "__main__":
         # self.cleanup(cur_frame_idx)
         # toc.record()
         # torch.cuda.synchronize()
+
+
+
+
+if __name__ == "__main__":
+    main()
