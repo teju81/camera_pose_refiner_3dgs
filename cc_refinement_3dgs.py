@@ -1,5 +1,5 @@
 import time
-
+from PIL import Image
 import numpy as np
 import torch
 import torch.multiprocessing as mp
@@ -103,6 +103,7 @@ class FrontEnd:
             torch.cuda.empty_cache()
 
     def run(self):
+        pass    
 
 def main():
 
@@ -122,14 +123,34 @@ def main():
 
     device = "cuda:0"
 
-    fx = config["Dataset"]["Calibration"]["fx"]
-    fy = config["Dataset"]["Calibration"]["fy"]
-    cx = config["Dataset"]["Calibration"]["cx"]
-    cy = config["Dataset"]["Calibration"]["cy"]
-    fovx = config["Dataset"]["Calibration"]["fovx"]
-    fovy = config["Dataset"]["Calibration"]["fovy"]
-    height = config["Dataset"]["Calibration"]["height"]
-    width = config["Dataset"]["Calibration"]["width"]
+    # Intrinsics
+    cx = 1256.19745
+    cy = 843.384206
+    fx = 2251.68856
+    fy = 2326.39212
+    H = 1440
+    W = 2560
+
+    theta_left  = np.arctan(cx / fx)
+    theta_right = np.arctan((W - cx) / fx)
+    theta_top   = np.arctan(cy / fy)
+    theta_bot   = np.arctan((H - cy) / fy)
+
+    fovx = np.degrees(theta_left + theta_right)
+    fovy = np.degrees(theta_top  + theta_bot)
+
+    # # Distortion Coefficients
+    # distCoeffs = np.array([[-0.45140879,  0.22732696,  0., 0., 0. ]]) 
+
+
+    # fx = config["Dataset"]["Calibration"]["fx"]
+    # fy = config["Dataset"]["Calibration"]["fy"]
+    # cx = config["Dataset"]["Calibration"]["cx"]
+    # cy = config["Dataset"]["Calibration"]["cy"]
+    # fovx = config["Dataset"]["Calibration"]["fovx"]
+    # fovy = config["Dataset"]["Calibration"]["fovy"]
+    # H = config["Dataset"]["Calibration"]["height"]
+    # W = config["Dataset"]["Calibration"]["width"]
 
 
     # Need to define Viewpoint and pass it to this function
@@ -140,13 +161,15 @@ def main():
         fy=fy,
         cx=cx,
         cy=cy,
-        W=width,
-        H=height,
+        W=W,
+        H=H,
     ).transpose(0, 1)
     projection_matrix = projection_matrix.to(device=device)
 
     # depth and pose can be some random initialization, gt_color must be initialized with infra camera RGB image
-    gt_color, gt_depth, gt_pose
+    gt_color = np.array(Image.open("/home/raviteja/code/datasets/artgarage/xgrids/camera_calibration/infra_cam_gt_rgb.png"))
+    gt_depth = np.zeros((H, W), dtype=np.float32)
+    gt_pose = np.eye(4, dtype=np.float32)
 
     viewpoint = Camera(
         0,
@@ -166,14 +189,19 @@ def main():
     )
     viewpoint.compute_grad_mask(config)
 
+    # Approx Extrinsics
+    approx_ext = np.array([[ 0.34106683,  0.54607777,  0.76515773,  4.2593201 ],
+     [-0.36391896,  0.82719075, -0.42820727,  0.29813336],
+     [-0.86675423, -0.13242069,  0.48083896,  1.26206598],
+     [ 0.,          0.,          0.,          1.        ]])
+    R = approx_ext[:3,:3]
+    T = approx_ext[:3, 3]
 
     # Need to provide approx infra camera pose here - check format
     viewpoint.update_RT(R, T)
 
-
     sh_degree = 3
-    #ply_file_path="/root/code/datasets/xgrids/LCC_output/AG_Office/ply-result/point_cloud/iteration_100/point_cloud.ply"
-    ply_file_path="/root/code/datasets/ARTGarage/lab_office_in_out_k1_scanner/output/LCC_Studio_GaussianSplat_out/AG_lab/ply-result/point_cloud/iteration_100/point_cloud.ply"
+    ply_file_path="/home/raviteja/code/datasets/artgarage/xgrids/camera_calibration/point_cloud.ply"
 
     # Load Gaussian Model
     use_spherical_harmonics = config["Training"]["spherical_harmonics"]
@@ -181,9 +209,10 @@ def main():
     model_params.sh_degree = 3 if use_spherical_harmonics else 0
     front_end = FrontEnd(config)
     front_end.gaussians = GaussianModel(model_params.sh_degree, config=config) # Retain
+    front_end.gaussians.load_plypath(ply_file_path)
 
     # Tracking
-    render_pkg = self.tracking(cur_frame_idx, viewpoint)
+    render_pkg = front_end.tracking(cur_frame_idx, viewpoint)
 
 
         # curr_visibility = (render_pkg["n_touched"] > 0).long()
