@@ -208,6 +208,8 @@ def main():
 
     # Need to provide approx infra camera pose here - check format
     viewpoint.update_RT(R, T)
+    print(f"Old viewpoint R: {viewpoint.R}")
+    print(f"Old viewpoint T: {viewpoint.T}")
 
     sh_degree = 3
     ply_file_path="/root/code/datasets/artgarage/xgrids/camera_calibration/point_cloud.ply"
@@ -222,6 +224,8 @@ def main():
 
     # Tracking
     render_pkg = front_end.tracking(0, viewpoint)
+    print(f"New viewpoint R: {viewpoint.R}")
+    print(f"New viewpoint T: {viewpoint.T}")
 
 
         # curr_visibility = (render_pkg["n_touched"] > 0).long()
