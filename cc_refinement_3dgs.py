@@ -119,6 +119,7 @@ def main():
 
     config_file_path = "/root/code/camera_pose_refiner_3dgs/configs/mono/tum/fr1_desk.yaml"
     config = load_config(config_file_path)
+    config["Training"]["monocular"] = config["Dataset"]["sensor_type"] == "monocular"
 
 
     # with open(config_file_path, "r") as yml:
